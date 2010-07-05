@@ -7,6 +7,8 @@
 #endif
 
 #include <ldap.h>
+#include <lber.h>
+#include <stdlib.h>
 
 static VALUE cLDAP;
 static VALUE cLDAP_Message;
@@ -79,11 +81,17 @@ static VALUE rldap_alloc(VALUE klass)
 	return obj;
 }
 
-static VALUE rldap_initialize(VALUE obj, VALUE rhost, VALUE rport)
+static VALUE rldap_initialize(int argc, VALUE* argv, VALUE obj)
 {
+	VALUE rhost, rport;
 	char* host;
 	int port;
 	RLDAP_WRAP* wrapper;
+
+	rb_scan_args(argc, argv, "11", &rhost, &rport);
+
+	if (NIL_P(rport))
+		rport = INT2FIX(LDAP_PORT);
 
 	wrapper = get_wrapper(obj);
 	host = StringValuePtr(rhost);
@@ -186,6 +194,16 @@ static VALUE rldap_errno(VALUE obj)
 	return INT2NUM(errno);
 }
 
+int rldap_errno_c(VALUE obj)
+{
+	RLDAP_WRAP* wrapper;
+	int errno;
+
+	wrapper = get_wrapper(obj);
+	ldap_get_option(wrapper->ld, LDAP_OPT_RESULT_CODE, &errno);
+	return errno;
+}
+
 
 /* class LDAP::Message */
 
@@ -218,24 +236,54 @@ static VALUE rldap_msg_get_val(VALUE obj, VALUE key)
 {
 	RLDAP_MSG_WRAP* wrapper;
 	char* attr;
-	char** values;
+	BerValue** values;
 	VALUE ary;
-	int i;
-	char* value;
+	int i, length;
+	BerValue* value;
+	char* strval;
+	VALUE str;
 	
 	wrapper = get_msg_wrapper(obj);
 	attr = StringValuePtr(key);
 	
-	values = ldap_get_values(wrapper->ld, wrapper->mesg, attr);
-	
-	ary = rb_ary_new();
-	
-	for (i=0; *(values+i); i++) {
-		rb_ary_push(ary, rb_str_new2(values[i]));
+	values = ldap_get_values_len(wrapper->ld, wrapper->mesg, attr);
+
+	if (values == NULL) {
+		rldap_raise(rldap_errno_c(obj));
 	}
 	
-	ldap_value_free(values);
+	ary = rb_ary_new();
+	length = ldap_count_values_len(values);
 	
+	for (i=0; i<length; i++) {
+		value = values[i];
+		str = rb_str_new(value->bv_val, value->bv_len);
+		rb_ary_push(ary, str);
+	}
+	
+	ldap_value_free_len(values);
+	
+	return ary;
+}
+
+static VALUE rldap_msg_keys(VALUE obj)
+{
+	RLDAP_MSG_WRAP* wrapper;
+	char* attr;
+	BerElement* ber;
+	VALUE ary;
+
+	wrapper = get_msg_wrapper(obj);
+	ary = rb_ary_new();
+
+	attr = ldap_first_attribute(wrapper->ld, wrapper->mesg, &ber);
+	do {
+		rb_ary_push(ary, rb_str_new2(attr));
+		ldap_memfree(attr);
+	} while (attr = ldap_next_attribute(wrapper->ld, wrapper->mesg, ber));
+
+	ber_free(ber, 0);
+
 	return ary;
 }
 
@@ -248,7 +296,7 @@ void Init_ldap()
 
 	rb_define_alloc_func(cLDAP, rldap_alloc);
 	rb_define_singleton_method(cLDAP, "err2string", rldap_err2string, 1);
-	rb_define_method(cLDAP, "initialize", rldap_initialize, 2);
+	rb_define_method(cLDAP, "initialize", rldap_initialize, -1);
 	rb_define_method(cLDAP, "start_tls", rldap_start_tls, 0);
 	rb_define_method(cLDAP, "search", rldap_search, 2);
 	rb_define_method(cLDAP, "set_option", rldap_set_option, 2);
@@ -256,6 +304,7 @@ void Init_ldap()
 	
 	rb_define_method(cLDAP_Message, "dn", rldap_msg_dn, 0);
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
+	rb_define_method(cLDAP_Message, "keys", rldap_msg_keys, 0);
 	
 	#include "constants.h"
 }
