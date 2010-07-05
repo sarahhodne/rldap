@@ -104,7 +104,7 @@ static VALUE rldap_start_tls(VALUE obj)
 	if (retval == LDAP_SUCCESS)
 		return Qtrue;
 	else
-		return Qfalse;
+		rldap_raise(retval);
 }
 
 static VALUE rldap_search(VALUE obj, VALUE rbase, VALUE rfilter)
