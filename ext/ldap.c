@@ -15,37 +15,37 @@ static VALUE cLDAP_Message;
 static VALUE eLDAP;
 
 typedef struct {
-	LDAP* ld;
+	LDAP *ld;
 	char connection;
 } RLDAP_WRAP;
 
 typedef struct {
-	LDAP* ld;
-	LDAPMessage* mesg;
+	LDAP *ld;
+	LDAPMessage *mesg;
 	char freed;
 } RLDAP_MSG_WRAP;
 
-static RLDAP_WRAP* get_wrapper(VALUE obj)
+static RLDAP_WRAP *get_wrapper(VALUE obj)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	Data_Get_Struct(obj, RLDAP_WRAP, wrapper);
 	return wrapper;
 }
 
-static RLDAP_MSG_WRAP* get_msg_wrapper(VALUE obj)
+static RLDAP_MSG_WRAP *get_msg_wrapper(VALUE obj)
 {
 	RLDAP_MSG_WRAP* wrapper;
 	Data_Get_Struct(obj, RLDAP_MSG_WRAP, wrapper);
 	return wrapper;
 }
 
-static void free_wrapper(RLDAP_WRAP* wrapper)
+static void free_wrapper(RLDAP_WRAPPER *wrapper)
 {
 	ldap_memfree(wrapper->ld);
 	xfree(wrapper);
 }
 
-static void free_msg_wrapper(RLDAP_MSG_WRAP* wrapper)
+static void free_msg_wrapper(RLDAP_MSG_WRAP *wrapper)
 {
 	if (wrapper->freed == Qfalse)
 		ldap_msgfree(wrapper->mesg);
@@ -59,7 +59,7 @@ static void rldap_raise(int errno)
 	rb_exc_raise(e);
 }
 
-static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg);
+static VALUE ldapmessage2obj(LDAP *ld, LDAPMessage *msg);
 
 /* class LDAP */
 
@@ -72,7 +72,7 @@ static VALUE rldap_err2string(VALUE klass, VALUE rerrno)
 
 static VALUE rldap_alloc(VALUE klass)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	VALUE obj;
 
 	obj = Data_Make_Struct(klass, RLDAP_WRAP, 0, free_wrapper, wrapper);
@@ -81,10 +81,10 @@ static VALUE rldap_alloc(VALUE klass)
 	return obj;
 }
 
-static VALUE rldap_initialize(int argc, VALUE* argv, VALUE obj)
+static VALUE rldap_initialize(int argc, VALUE *argv, VALUE obj)
 {
 	VALUE rhost, rport;
-	char* host;
+	char *host;
 	int port;
 	RLDAP_WRAP* wrapper;
 
@@ -104,7 +104,7 @@ static VALUE rldap_initialize(int argc, VALUE* argv, VALUE obj)
 
 static VALUE rldap_start_tls(VALUE obj)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	int retval;
 
 	wrapper = get_wrapper(obj);
@@ -117,12 +117,10 @@ static VALUE rldap_start_tls(VALUE obj)
 
 static VALUE rldap_search(VALUE obj, VALUE rbase, VALUE rfilter)
 {
-	RLDAP_WRAP* wrapper;
-	char* base;
-	char* filter;
+	RLDAP_WRAP *wrapper;
+	char *base, *filter;
 	int retval, count, i;
-	LDAPMessage* res;
-	LDAPMessage* msg;
+	LDAPMessage *res, *msg;
 	VALUE ary;
 
 	wrapper = get_wrapper(obj);
@@ -156,12 +154,12 @@ static VALUE rldap_search(VALUE obj, VALUE rbase, VALUE rfilter)
 
 static VALUE rldap_set_option(VALUE obj, VALUE roption, VALUE rvalue)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	int retval;
 	int option;
 	int ival;
-	char* sval;
-	void* val;
+	char *sval;
+	void *val;
 	
 	wrapper = get_wrapper(obj);
 	option = FIX2INT(roption);
@@ -184,7 +182,7 @@ static VALUE rldap_set_option(VALUE obj, VALUE roption, VALUE rvalue)
 
 static VALUE rldap_errno(VALUE obj)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	int errno;
 	
 	wrapper = get_wrapper(obj);
@@ -196,7 +194,7 @@ static VALUE rldap_errno(VALUE obj)
 
 int rldap_errno_c(VALUE obj)
 {
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 	int errno;
 
 	wrapper = get_wrapper(obj);
@@ -210,7 +208,7 @@ int rldap_errno_c(VALUE obj)
 static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
 {
 	VALUE obj;
-	RLDAP_MSG_WRAP* wrapper;
+	RLDAP_MSG_WRAP *wrapper;
 
 	obj = Data_Make_Struct(cLDAP_Message, RLDAP_MSG_WRAP, 0, free_msg_wrapper, wrapper);
 	wrapper->mesg = msg;
@@ -222,8 +220,8 @@ static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
 
 static VALUE rldap_msg_dn(VALUE obj)
 {
-	RLDAP_MSG_WRAP* wrapper;
-	char* dn;
+	RLDAP_MSG_WRAP *wrapper;
+	char *dn;
 	
 	wrapper = get_msg_wrapper(obj);
 	
@@ -234,14 +232,12 @@ static VALUE rldap_msg_dn(VALUE obj)
 
 static VALUE rldap_msg_get_val(VALUE obj, VALUE key)
 {
-	RLDAP_MSG_WRAP* wrapper;
-	char* attr;
-	BerValue** values;
-	VALUE ary;
+	RLDAP_MSG_WRAP *wrapper;
+	char *attr, *strval;
+	BerValue **values;
+	VALUE ary, str;
 	int i, length;
-	BerValue* value;
-	char* strval;
-	VALUE str;
+	BerValue *value;
 	
 	wrapper = get_msg_wrapper(obj);
 	attr = StringValuePtr(key);
@@ -268,9 +264,9 @@ static VALUE rldap_msg_get_val(VALUE obj, VALUE key)
 
 static VALUE rldap_msg_keys(VALUE obj)
 {
-	RLDAP_MSG_WRAP* wrapper;
-	char* attr;
-	BerElement* ber;
+	RLDAP_MSG_WRAP *wrapper;
+	char *attr;
+	BerElement *ber;
 	VALUE ary;
 
 	wrapper = get_msg_wrapper(obj);
