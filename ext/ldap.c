@@ -86,7 +86,7 @@ static VALUE rldap_initialize(int argc, VALUE *argv, VALUE obj)
 	VALUE rhost, rport;
 	char *host;
 	int port;
-	RLDAP_WRAP* wrapper;
+	RLDAP_WRAP *wrapper;
 
 	rb_scan_args(argc, argv, "11", &rhost, &rport);
 
@@ -97,7 +97,7 @@ static VALUE rldap_initialize(int argc, VALUE *argv, VALUE obj)
 	host = StringValuePtr(rhost);
 	port = FIX2INT(rport);
 
-	wrapper->ld = ldap_open(host, port);
+	wrapper->ld = (LDAP *)ldap_init(host, port);
 
 	return obj;
 }
@@ -222,12 +222,15 @@ static VALUE rldap_msg_dn(VALUE obj)
 {
 	RLDAP_MSG_WRAP *wrapper;
 	char *dn;
+	VALUE rdn;
 	
 	wrapper = get_msg_wrapper(obj);
 	
 	dn = ldap_get_dn(wrapper->ld, wrapper->mesg);
+	rdn = rb_str_new2(dn);
+	ldap_memfree(dn);
 	
-	return rb_str_new2(dn);
+	return rdn;
 }
 
 static VALUE rldap_msg_get_val(VALUE obj, VALUE key)
@@ -269,6 +272,11 @@ static VALUE rldap_msg_keys(VALUE obj)
 	BerElement *ber;
 	VALUE ary;
 
+	ary = rb_iv_get(obj, "@keys");
+
+	if (ary != Qnil)
+		return ary;
+
 	wrapper = get_msg_wrapper(obj);
 	ary = rb_ary_new();
 
@@ -279,6 +287,8 @@ static VALUE rldap_msg_keys(VALUE obj)
 	} while (attr = ldap_next_attribute(wrapper->ld, wrapper->mesg, ber));
 
 	ber_free(ber, 0);
+
+	rb_iv_set(obj, "@keys", ary);
 
 	return ary;
 }
