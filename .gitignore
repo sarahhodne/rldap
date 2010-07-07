@@ -2,3 +2,4 @@
 *.so
 mkmf.log
 Makefile
+*.gem
