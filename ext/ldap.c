@@ -39,7 +39,7 @@ static RLDAP_MSG_WRAP *get_msg_wrapper(VALUE obj)
 	return wrapper;
 }
 
-static void free_wrapper(RLDAP_WRAPPER *wrapper)
+static void free_wrapper(RLDAP_WRAP *wrapper)
 {
 	ldap_memfree(wrapper->ld);
 	xfree(wrapper);
