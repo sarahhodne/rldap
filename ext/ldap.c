@@ -115,19 +115,25 @@ static VALUE rldap_start_tls(VALUE obj)
 		rldap_raise(retval);
 }
 
-static VALUE rldap_search(VALUE obj, VALUE rbase, VALUE rfilter)
+static VALUE rldap_search(int argc, VALUE *argv, VALUE obj)
 {
 	RLDAP_WRAP *wrapper;
 	char *base, *filter;
-	int retval, count, i;
+	int retval, count, i, scope;
 	LDAPMessage *res, *msg;
-	VALUE ary;
+	VALUE ary, rbase, rfilter, rscope;
+	
+	rb_scan_args(argc, argv, "21", &rbase, &rfilter, &rscope);
+
+	if (NIL_P(rscope))
+		rscope = INT2FIX(LDAP_SCOPE_SUBTREE);
 
 	wrapper = get_wrapper(obj);
 	base = StringValuePtr(rbase);
 	filter = StringValuePtr(rfilter);
+	scope = FIX2INT(rscope);
 
-	retval = ldap_search_ext_s(wrapper->ld, base, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &res);
+	retval = ldap_search_ext_s(wrapper->ld, base, scope, filter, NULL, 0, NULL, NULL, NULL, 0, &res);
 
 	if (retval != LDAP_SUCCESS)
 		rldap_raise(retval);
@@ -304,7 +310,7 @@ void Init_ldap()
 	rb_define_singleton_method(cLDAP, "err2string", rldap_err2string, 1);
 	rb_define_method(cLDAP, "initialize", rldap_initialize, -1);
 	rb_define_method(cLDAP, "start_tls", rldap_start_tls, 0);
-	rb_define_method(cLDAP, "search", rldap_search, 2);
+	rb_define_method(cLDAP, "search", rldap_search, -1);
 	rb_define_method(cLDAP, "set_option", rldap_set_option, 2);
 	rb_define_method(cLDAP, "errno", rldap_errno, 0);
 	
