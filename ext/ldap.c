@@ -318,5 +318,7 @@ void Init_ldap()
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
 	rb_define_method(cLDAP_Message, "keys", rldap_msg_keys, 0);
 	
+	rb_require("ldap/helpers");
+	
 	#include "constants.h"
 }
