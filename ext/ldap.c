@@ -122,16 +122,35 @@ static VALUE rldap_search(int argc, VALUE *argv, VALUE obj)
 	int retval, count, i, scope;
 	LDAPMessage *res, *msg;
 	VALUE ary, rbase, rfilter, rscope;
+	ID iscope;
 	
 	rb_scan_args(argc, argv, "21", &rbase, &rfilter, &rscope);
 
-	if (NIL_P(rscope))
-		rscope = INT2FIX(LDAP_SCOPE_SUBTREE);
-
+	switch(TYPE(rscope)) {
+		case T_NIL:
+			scope = LDAP_SCOPE_SUBTREE;
+			break;
+		case T_FIXNUM:
+			scope = FIX2INT(rscope);
+			break;
+		case T_SYMBOL:
+		case T_STRING:
+			iscope = rb_to_id(rscope);
+			if (iscope == rb_intern("subtree"))
+				scope = LDAP_SCOPE_SUBTREE;
+			if (iscope == rb_intern("base"))
+				scope = LDAP_SCOPE_BASE;
+			if (iscope == rb_intern("one"))
+				scope = LDAP_SCOPE_ONE;
+			break;
+		default:
+			rb_raise(rb_eTypeError, "not a valid scope");
+			break;
+	}
+	
 	wrapper = get_wrapper(obj);
 	base = StringValuePtr(rbase);
 	filter = StringValuePtr(rfilter);
-	scope = FIX2INT(rscope);
 
 	retval = ldap_search_ext_s(wrapper->ld, base, scope, filter, NULL, 0, NULL, NULL, NULL, 0, &res);
 
