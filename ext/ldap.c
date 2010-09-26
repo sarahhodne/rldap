@@ -16,13 +16,11 @@ static VALUE eLDAP;
 
 typedef struct {
 	LDAP *ld;
-	char connection;
 } RLDAP_WRAP;
 
 typedef struct {
 	LDAP *ld;
 	LDAPMessage *mesg;
-	char freed;
 } RLDAP_MSG_WRAP;
 
 static RLDAP_WRAP *get_wrapper(VALUE obj)
@@ -42,14 +40,15 @@ static RLDAP_MSG_WRAP *get_msg_wrapper(VALUE obj)
 static void free_wrapper(RLDAP_WRAP *wrapper)
 {
 	ldap_memfree(wrapper->ld);
-	xfree(wrapper);
+	free(wrapper);
 }
 
 static void free_msg_wrapper(RLDAP_MSG_WRAP *wrapper)
 {
-	if (wrapper->freed == Qfalse)
+	if (wrapper->mesg != NULL)
 		ldap_msgfree(wrapper->mesg);
-	xfree(wrapper);
+	wrapper->ld = NULL;
+	free(wrapper);
 }
 
 static void rldap_raise(int errno)
@@ -76,7 +75,6 @@ static VALUE rldap_alloc(VALUE klass)
 	VALUE obj;
 
 	obj = Data_Make_Struct(klass, RLDAP_WRAP, 0, free_wrapper, wrapper);
-	wrapper->connection = Qfalse;
 
 	return obj;
 }
@@ -174,6 +172,8 @@ static VALUE rldap_search(int argc, VALUE *argv, VALUE obj)
 		msg = ldap_next_entry(wrapper->ld, msg);
 	}
 	
+	
+	
 	return ary;
 }
 
@@ -205,16 +205,9 @@ static VALUE rldap_set_option(VALUE obj, VALUE roption, VALUE rvalue)
 		return Qfalse;
 }
 
-static VALUE rldap_errno(VALUE obj)
+static VALUE rldap_set_version(VALUE obj, VALUE version)
 {
-	RLDAP_WRAP *wrapper;
-	int errno;
-	
-	wrapper = get_wrapper(obj);
-	
-	ldap_get_option(wrapper->ld, LDAP_OPT_RESULT_CODE, &errno);
-	
-	return INT2NUM(errno);
+	return rldap_set_option(obj, INT2FIX(LDAP_OPT_PROTOCOL_VERSION), version);
 }
 
 int rldap_errno_c(VALUE obj)
@@ -227,6 +220,35 @@ int rldap_errno_c(VALUE obj)
 	return errno;
 }
 
+static VALUE rldap_errno(VALUE obj)
+{
+	return INT2NUM(rldap_errno_c(obj));
+}
+
+static VALUE rldap_uri(VALUE obj)
+{
+	RLDAP_WRAP *wrapper;
+	char *uri;
+	VALUE ruri;
+	
+	wrapper = get_wrapper(obj);
+	ldap_get_option(wrapper->ld, LDAP_OPT_URI, &uri);
+	
+	return rb_str_new2(uri);
+}
+
+static VALUE rldap_inspect(VALUE obj)
+{
+	VALUE ruri, ret;
+	
+	ruri = rb_funcall(rldap_uri(obj), rb_intern("dump"), 0);
+	ret = rb_str_new2("#<LDAP @uri=");
+	rb_str_cat2(ret, StringValuePtr(ruri));
+	rb_str_cat2(ret, ">");
+	
+	return ret;
+}
+
 
 /* class LDAP::Message */
 
@@ -237,7 +259,6 @@ static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
 
 	obj = Data_Make_Struct(cLDAP_Message, RLDAP_MSG_WRAP, 0, free_msg_wrapper, wrapper);
 	wrapper->mesg = msg;
-	wrapper->freed = Qfalse;
 	wrapper->ld = ld;
 
 	return obj;
@@ -331,13 +352,14 @@ void Init_ldap()
 	rb_define_method(cLDAP, "start_tls", rldap_start_tls, 0);
 	rb_define_method(cLDAP, "search", rldap_search, -1);
 	rb_define_method(cLDAP, "set_option", rldap_set_option, 2);
+	rb_define_method(cLDAP, "version=", rldap_set_version, 1);
 	rb_define_method(cLDAP, "errno", rldap_errno, 0);
+	rb_define_method(cLDAP, "uri", rldap_uri, 0);
+	rb_define_method(cLDAP, "inspect", rldap_inspect, 0);
 	
 	rb_define_method(cLDAP_Message, "dn", rldap_msg_dn, 0);
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
 	rb_define_method(cLDAP_Message, "keys", rldap_msg_keys, 0);
-	
-	rb_require("ldap/helpers");
 	
 	#include "constants.h"
 }
