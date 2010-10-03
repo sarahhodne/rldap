@@ -5,6 +5,6 @@ task :publish do
   sh "gem build rldap.gemspec"
   sh "gem push rldap-#{LDAP::Version}.gem"
   sh "git tag v#{LDAP::Version}"
-  sh "git push origin --tags"
+  sh "git push origin master --tags"
 end
 
