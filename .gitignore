@@ -4,3 +4,5 @@
 mkmf.log
 Makefile
 *.gem
+pkg/*
+.bundle
