@@ -254,6 +254,7 @@ static VALUE rldap_unbind(VALUE obj)
 	RLDAP_WRAP *wrapper;
 	int retval;
 	
+	wrapper = get_wrapper(obj);
 	retval = ldap_unbind_s(wrapper->ld);
 	if (retval != LDAP_SUCCESS)
 		rldap_raise(retval);
