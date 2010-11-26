@@ -6,3 +6,4 @@ Makefile
 *.gem
 pkg/*
 .bundle
+Gemfile.lock
