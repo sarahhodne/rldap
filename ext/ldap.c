@@ -249,6 +249,18 @@ static VALUE rldap_bind(int argc, VALUE *argv, VALUE obj)
 		return Qtrue;
 }
 
+static VALUE rldap_unbind(VALUE obj)
+{
+	RLDAP_WRAP *wrapper;
+	int retval;
+	
+	retval = ldap_unbind_s(wrapper->ld);
+	if (retval != LDAP_SUCCESS)
+		rldap_raise(retval);
+	else
+		return Qtrue;
+}
+
 /* class LDAP::Message */
 
 static VALUE ldapmessage2obj(LDAP *ld, LDAPMessage *msg)
@@ -335,6 +347,7 @@ void Init_ldap()
 	rb_define_method(cLDAP, "uri", rldap_uri, 0);
 	rb_define_method(cLDAP, "inspect", rldap_inspect, 0);
 	rb_define_method(cLDAP, "bind", rldap_bind, -1);
+	rb_define_method(cLDAP, "unbind", rldap_unbind, 0);
 	
 	rb_define_method(cLDAP_Message, "dn", rldap_msg_dn, 0);
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
