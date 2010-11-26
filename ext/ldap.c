@@ -230,10 +230,9 @@ static VALUE rldap_inspect(VALUE obj)
 
 /* class LDAP::Message */
 
-static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
+static VALUE ldapmessage2obj(LDAP *ld, LDAPMessage *msg)
 {
 	VALUE obj;
-	RLDAP_WRAP *wrapper;
 	
 	char *dn, *attr;
 	BerElement *ber;
@@ -242,8 +241,7 @@ static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
 	VALUE rdn, attrs, ary, str;
 	int length, i;
 
-	obj = Data_Make_Struct(cLDAP_Message, RLDAP_WRAP, 0, free_wrapper, wrapper);
-	wrapper->ld = ld;
+	obj = rb_class_new_instance(0, NULL, cLDAP_Message);
 	
 	// Set the DN
 	dn = ldap_get_dn(ld, msg);
