@@ -236,8 +236,14 @@ static VALUE rldap_bind(int argc, VALUE *argv, VALUE obj)
 	
 	rb_scan_args(argc, argv, "02", &rdn, &rpassword);
 	
-	bind_dn = StringValuePtr(rdn);
-	bind_password = StringValuePtr(rpassword);
+	if (NIL_P(rdn))
+		bind_dn = NULL;
+	else
+		bind_dn = StringValuePtr(rdn);
+	if (NIL_P(rpassword))
+		bind_password = NULL;
+	else
+		bind_password = StringValuePtr(rpassword);
 	
 	wrapper = get_wrapper(obj);
 
