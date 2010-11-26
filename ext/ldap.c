@@ -227,6 +227,27 @@ static VALUE rldap_inspect(VALUE obj)
 	return ret;
 }
 
+static VALUE rldap_bind(int argc, VALUE *argv, VALUE obj)
+{
+	RLDAP_WRAP *wrapper;
+	char *bind_dn = NULL, *bind_password = NULL;
+	int retval;
+	VALUE rdn, rpassword;
+	
+	rb_scan_args(argc, argv, "02", &rdn, &rpassword);
+	
+	bind_dn = StringValuePtr(rdn);
+	bind_password = StringValuePtr(rpassword);
+	
+	wrapper = get_wrapper(obj);
+
+	retval = ldap_bind_s(wrapper->ld, bind_dn, bind_password, LDAP_AUTH_SIMPLE);
+	
+	if (retval != LDAP_SUCCESS)
+		rldap_raise(retval);
+	else
+		return Qtrue;
+}
 
 /* class LDAP::Message */
 
@@ -313,6 +334,7 @@ void Init_ldap()
 	rb_define_method(cLDAP, "errno", rldap_errno, 0);
 	rb_define_method(cLDAP, "uri", rldap_uri, 0);
 	rb_define_method(cLDAP, "inspect", rldap_inspect, 0);
+	rb_define_method(cLDAP, "bind", rldap_bind, -1);
 	
 	rb_define_method(cLDAP_Message, "dn", rldap_msg_dn, 0);
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
