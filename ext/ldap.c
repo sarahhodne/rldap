@@ -18,11 +18,6 @@ typedef struct {
 	LDAP *ld;
 } RLDAP_WRAP;
 
-typedef struct {
-	LDAP *ld;
-	LDAPMessage *mesg;
-} RLDAP_MSG_WRAP;
-
 static RLDAP_WRAP *get_wrapper(VALUE obj)
 {
 	RLDAP_WRAP *wrapper;
@@ -30,24 +25,9 @@ static RLDAP_WRAP *get_wrapper(VALUE obj)
 	return wrapper;
 }
 
-static RLDAP_MSG_WRAP *get_msg_wrapper(VALUE obj)
-{
-	RLDAP_MSG_WRAP* wrapper;
-	Data_Get_Struct(obj, RLDAP_MSG_WRAP, wrapper);
-	return wrapper;
-}
-
 static void free_wrapper(RLDAP_WRAP *wrapper)
 {
 	ldap_memfree(wrapper->ld);
-	free(wrapper);
-}
-
-static void free_msg_wrapper(RLDAP_MSG_WRAP *wrapper)
-{
-	if (wrapper->mesg != NULL)
-		ldap_msgfree(wrapper->mesg);
-	wrapper->ld = NULL;
 	free(wrapper);
 }
 
@@ -172,8 +152,6 @@ static VALUE rldap_search(int argc, VALUE *argv, VALUE obj)
 		msg = ldap_next_entry(wrapper->ld, msg);
 	}
 	
-	
-	
 	return ary;
 }
 
@@ -255,88 +233,69 @@ static VALUE rldap_inspect(VALUE obj)
 static VALUE ldapmessage2obj(LDAP* ld, LDAPMessage* msg)
 {
 	VALUE obj;
-	RLDAP_MSG_WRAP *wrapper;
+	RLDAP_WRAP *wrapper;
+	
+	char *dn, *attr;
+	BerElement *ber;
+	BerValue **values;
+	BerValue *value;
+	VALUE rdn, attrs, ary, str;
+	int length, i;
 
-	obj = Data_Make_Struct(cLDAP_Message, RLDAP_MSG_WRAP, 0, free_msg_wrapper, wrapper);
-	wrapper->mesg = msg;
+	obj = Data_Make_Struct(cLDAP_Message, RLDAP_WRAP, 0, free_wrapper, wrapper);
 	wrapper->ld = ld;
+	
+	// Set the DN
+	dn = ldap_get_dn(ld, msg);
+	rdn = rb_str_new2(dn);
+	ldap_memfree(dn);
+	rb_iv_set(obj, "@dn", rdn);
+	
+	// Set the attributes
+	attrs = rb_hash_new();
+	attr = ldap_first_attribute(ld, msg, &ber);
+	do {
+		values = ldap_get_values_len(ld, msg, attr);
+
+		if (values == NULL) {
+			rldap_raise(rldap_errno_c(obj));
+		}
+
+		ary = rb_ary_new();
+		length = ldap_count_values_len(values);
+
+		for (i=0; i<length; i++) {
+			value = values[i];
+			str = rb_str_new(value->bv_val, value->bv_len);
+			rb_ary_push(ary, str);
+		}
+		
+		rb_hash_aset(attrs, rb_str_new2(attr), ary);
+
+		ldap_value_free_len(values);
+		ldap_memfree(attr);
+	} while (attr = ldap_next_attribute(ld, msg, ber));
+
+	ber_free(ber, 0);
+
+	rb_iv_set(obj, "@attrs", attrs);
 
 	return obj;
 }
 
 static VALUE rldap_msg_dn(VALUE obj)
-{
-	RLDAP_MSG_WRAP *wrapper;
-	char *dn;
-	VALUE rdn;
-	
-	wrapper = get_msg_wrapper(obj);
-	
-	dn = ldap_get_dn(wrapper->ld, wrapper->mesg);
-	rdn = rb_str_new2(dn);
-	ldap_memfree(dn);
-	
-	return rdn;
+{	
+	return rb_iv_get(obj, "@dn");
 }
 
 static VALUE rldap_msg_get_val(VALUE obj, VALUE key)
-{
-	RLDAP_MSG_WRAP *wrapper;
-	char *attr, *strval;
-	BerValue **values;
-	VALUE ary, str;
-	int i, length;
-	BerValue *value;
-	
-	wrapper = get_msg_wrapper(obj);
-	attr = StringValuePtr(key);
-	
-	values = ldap_get_values_len(wrapper->ld, wrapper->mesg, attr);
-
-	if (values == NULL) {
-		rldap_raise(rldap_errno_c(obj));
-	}
-	
-	ary = rb_ary_new();
-	length = ldap_count_values_len(values);
-	
-	for (i=0; i<length; i++) {
-		value = values[i];
-		str = rb_str_new(value->bv_val, value->bv_len);
-		rb_ary_push(ary, str);
-	}
-	
-	ldap_value_free_len(values);
-	
-	return ary;
+{	
+	return rb_hash_aref(rb_iv_get(obj, "@attrs"), key);
 }
 
 static VALUE rldap_msg_keys(VALUE obj)
 {
-	RLDAP_MSG_WRAP *wrapper;
-	char *attr;
-	BerElement *ber;
-	VALUE ary;
-
-	ary = rb_iv_get(obj, "@keys");
-
-	if (ary != Qnil)
-		return ary;
-
-	wrapper = get_msg_wrapper(obj);
-	ary = rb_ary_new();
-
-	attr = ldap_first_attribute(wrapper->ld, wrapper->mesg, &ber);
-	do {
-		rb_ary_push(ary, rb_str_new2(attr));
-		ldap_memfree(attr);
-	} while (attr = ldap_next_attribute(wrapper->ld, wrapper->mesg, ber));
-
-	ber_free(ber, 0);
-
-	rb_iv_set(obj, "@keys", ary);
-
-	return ary;
+	return rb_funcall(rb_iv_get(obj, "@attrs"), rb_intern("keys"), 0);
 }
 
 
