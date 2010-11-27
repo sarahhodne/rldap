@@ -10,6 +10,12 @@
 #include <lber.h>
 #include <stdlib.h>
 
+#ifdef HAVE_SASL_H
+#include <sasl.h>
+#elif defined(HAVE_SASL_SASL_H)
+#include <sasl/sasl.h>
+#endif
+
 static VALUE cLDAP;
 static VALUE cLDAP_Message;
 static VALUE eLDAP;
@@ -268,6 +274,126 @@ static VALUE rldap_unbind(VALUE obj)
 		return Qtrue;
 }
 
+#ifdef HAVE_LDAP_SASL_INTERACTIVE_BIND_S
+
+typedef struct {
+	char *mech;
+	char *realm;
+	char *authcid;
+	char *passwd;
+	char *authzid;
+} RLDAP_BICTX;
+
+static RLDAP_BICTX *_rldap_sasl_setdefs(LDAP *ld, char *sasl_mech, char *sasl_realm, char *sasl_authc_id, char *passwd, char *sasl_authz_id)
+{
+	RLDAP_BICTX *ctx;
+	
+	ctx = ber_memalloc(sizeof(RLDAP_BICTX));	
+	ctx->mech    = (sasl_mech) ? ber_strdup(sasl_mech) : NULL;
+	ctx->realm   = (sasl_realm) ? ber_strdup(sasl_realm) : NULL;
+	ctx->authcid = (sasl_authc_id) ? ber_strdup(sasl_authc_id) : NULL;
+	ctx->passwd  = (passwd) ? ber_strdup(passwd) : NULL;
+	ctx->authzid = (sasl_authz_id) ? ber_strdup(sasl_authz_id) : NULL;
+
+	if (ctx->mech == NULL) {
+		ldap_get_option(ld, LDAP_OPT_X_SASL_MECH, &ctx->mech);
+	}
+	if (ctx->realm == NULL) {
+		ldap_get_option(ld, LDAP_OPT_X_SASL_REALM, &ctx->realm);
+	}
+	if (ctx->authcid == NULL) {
+		ldap_get_option(ld, LDAP_OPT_X_SASL_AUTHCID, &ctx->authcid);
+	}
+	if (ctx->authzid == NULL) {
+		ldap_get_option(ld, LDAP_OPT_X_SASL_AUTHZID, &ctx->authzid);
+	}
+
+	return ctx;
+}
+
+static void _rldap_sasl_freedefs(RLDAP_BICTX *ctx)
+{
+	if (ctx->mech) ber_memfree(ctx->mech);
+	if (ctx->realm) ber_memfree(ctx->realm);
+	if (ctx->authcid) ber_memfree(ctx->authcid);
+	if (ctx->passwd) ber_memfree(ctx->passwd);
+	if (ctx->authzid) ber_memfree(ctx->authzid);
+	ber_memfree(ctx);
+}
+
+static int _rldap_sasl_interact(LDAP *ld, unsigned flags, void *defaults, void *in)
+{
+	sasl_interact_t *interact = in;
+	const char *p;
+	RLDAP_BICTX *ctx = defaults;
+
+	for (;interact->id != SASL_CB_LIST_END;interact++) {
+		p = interact->defresult;
+		switch(interact->id) {
+			case SASL_CB_GETREALM:
+				p = ctx->realm;
+				break;
+			case SASL_CB_AUTHNAME:
+				p = ctx->authcid;
+				break;
+			case SASL_CB_USER:
+				p = ctx->authzid;
+				break;
+			case SASL_CB_PASS:
+				p = ctx->passwd;
+				break;
+		}
+		if (p) {
+			interact->result = p;
+			interact->len = strlen(p);
+		}
+	}
+	return LDAP_SUCCESS;
+}
+
+static VALUE rldap_sasl_bind(int argc, VALUE *argv, VALUE obj)
+{
+	RLDAP_WRAP *wrapper;
+	char *bind_dn = NULL, *passwd = NULL, *sasl_mech = NULL,
+		*sasl_realm = NULL, *sasl_authz_id = NULL, *sasl_authc_id = NULL;
+	VALUE rbind_dn, rpasswd, rsasl_mech, rsasl_realm,
+		rsasl_authz_id, rsasl_authc_id, rprops;
+	int retval;
+	RLDAP_BICTX *ctx;
+	
+	wrapper = get_wrapper(obj);
+	rb_scan_args(argc, argv, "07", &rbind_dn, &rpasswd, &rsasl_mech, &rsasl_realm, &rsasl_authz_id, &rsasl_authc_id, &rprops);
+	
+	if (!NIL_P(rprops))
+		ldap_set_option(wrapper->ld, LDAP_OPT_X_SASL_SECPROPS, StringValuePtr(rprops));
+	
+	if (!NIL_P(rbind_dn))
+		bind_dn = StringValuePtr(rbind_dn);
+	if (!NIL_P(rpasswd))
+		passwd = StringValuePtr(rpasswd);
+	if (!NIL_P(rsasl_mech))
+		sasl_mech = StringValuePtr(rsasl_mech);
+	if (!NIL_P(rsasl_realm))
+		sasl_realm = StringValuePtr(rsasl_realm);
+	if (!NIL_P(rsasl_authz_id))
+		sasl_authz_id = StringValuePtr(rsasl_authz_id);
+	if (!NIL_P(rsasl_authc_id))
+		sasl_authc_id = StringValuePtr(rsasl_authc_id);
+	
+	ctx = _rldap_sasl_setdefs(wrapper->ld, sasl_mech, sasl_realm, sasl_authc_id, passwd, sasl_authz_id);
+	
+	retval = ldap_sasl_interactive_bind_s(wrapper->ld, bind_dn, ctx->mech, NULL, NULL, LDAP_SASL_AUTOMATIC, _rldap_sasl_interact, ctx);
+	
+	_rldap_sasl_freedefs(ctx);
+	
+	if (retval != LDAP_SUCCESS)
+		rldap_raise(retval);
+	else
+		return Qtrue;
+}
+
+#endif
+
 /* class LDAP::Message */
 
 static VALUE ldapmessage2obj(LDAP *ld, LDAPMessage *msg)
@@ -355,6 +481,7 @@ void Init_ldap()
 	rb_define_method(cLDAP, "inspect", rldap_inspect, 0);
 	rb_define_method(cLDAP, "bind", rldap_bind, -1);
 	rb_define_method(cLDAP, "unbind", rldap_unbind, 0);
+	rb_define_method(cLDAP, "sasl_bind", rldap_sasl_bind, -1);
 	
 	rb_define_method(cLDAP_Message, "dn", rldap_msg_dn, 0);
 	rb_define_method(cLDAP_Message, "[]", rldap_msg_get_val, 1);
