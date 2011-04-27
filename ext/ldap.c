@@ -430,8 +430,14 @@ static VALUE ldapmessage2obj(LDAP *ld, LDAPMessage *msg)
 
 		for (i=0; i<length; i++) {
 			value = values[i];
-			str = rb_str_new(value->bv_val, value->bv_len);
-			rb_ary_push(ary, str);
+			if (value->bv_len == 4 && strncmp(value->bv_val, "TRUE", value->bv_len) == 0)
+				rb_ary_push(ary, Qtrue);
+			else if (value->bv_len == 5 && strncmp(value->bv_val, "FALSE", value->bv_len) == 0)
+				rb_ary_push(ary, Qfalse);
+			else {
+				str = rb_str_new(value->bv_val, value->bv_len);
+				rb_ary_push(ary, str);
+			}
 		}
 		
 		rb_hash_aset(attrs, rb_str_new2(attr), ary);
